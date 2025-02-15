@@ -31,36 +31,48 @@ import (
 )
 
 func enrichSPDX(bom *spdx.Document, logger *zerolog.Logger) {
-	packages := bom.Packages
+	bomPackages := bom.Packages
 
-	logger.Debug().Msgf("Detected %d packages", len(packages))
+	logger.Debug().Msgf("Detected %d packages", len(bomPackages))
 
-	for _, pkg := range packages {
+	pkgDataCache := make(map[string]*packages.Package)
+	pgkVersionDataCache := make(map[string]*packages.VersionWithDependencies)
+
+	for _, pkg := range bomPackages {
 		purl, err := extractPurl(pkg)
 		if err != nil {
 			continue
 		}
 
-		packageResp, err := GetPackageData(*purl)
-		if err != nil {
-			continue
+		pkgData, ok := pkgDataCache[purl.String()]
+
+		if !ok {
+			packageResp, err := GetPackageData(*purl)
+			if err != nil {
+				continue
+			}
+
+			pkgData = packageResp.JSON200
+			pkgDataCache[purl.String()] = pkgData
 		}
 
-		pkgData := packageResp.JSON200
 		if pkgData == nil {
 			continue
 		}
-
 		enrichSPDXDescription(pkg, pkgData)
 		enrichSPDXHomepage(pkg, pkgData)
 		enrichSPDXSupplier(pkg, pkgData)
 
-		packageVersionResp, err := GetPackageVersionData(*purl)
-		if err != nil {
-			continue
-		}
+		pkgVersionData, ok := pgkVersionDataCache[purl.String()]
+		if !ok {
+			packageVersionResp, err := GetPackageVersionData(*purl)
+			if err != nil {
+				continue
+			}
 
-		pkgVersionData := packageVersionResp.JSON200
+			pkgVersionData := packageVersionResp.JSON200
+			pgkVersionDataCache[purl.String()] = pkgVersionData
+		}
 		if pkgVersionData == nil {
 			continue
 		}
